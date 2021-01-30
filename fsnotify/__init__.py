@@ -15,7 +15,7 @@ Sample usage to track changes in a thread.
         change_enum, change_path = change
         if change_enum == fsnotify.Change.added:
             print('Added: ', change_path)
-            
+
         ...
 
     def start_watching():
@@ -44,7 +44,13 @@ except:
         # If all fails, use our vendored version (which won't have speedups).
         from .scandir_vendored import scandir
 
-from enum import IntEnum
+try:
+    from enum import IntEnum
+except:
+
+    class IntEnum(object):
+        pass
+
 from collections import deque
 
 import time
@@ -212,7 +218,7 @@ class Watcher(object):
     def iter_changes(self):
         '''
         Continuously provides changes (until dispose() is called).
-        
+
         :rtype: Iterable[Tuple[Change, str]]
         '''
         while not self._disposed.is_set():
