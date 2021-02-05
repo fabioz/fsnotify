@@ -12,6 +12,8 @@ See README.md or https://github.com/benhoyt/scandir for rationale and
 docs, or read PEP 471 (https://www.python.org/dev/peps/pep-0471/) for
 more details on its inclusion into Python 3.5
 
+scandir is released under the new BSD 3-clause license.
+
 Copyright (c) 2012, Ben Hoyt
 All rights reserved.
 

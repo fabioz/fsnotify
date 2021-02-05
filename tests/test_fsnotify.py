@@ -3,6 +3,11 @@ import pytest
 from fsnotify import Change
 import fsnotify
 
+try:
+    TimeoutError
+except NameError:
+    class TimeoutError(Exception):
+        pass
 
 def wait_for_condition(condition, msg=None, timeout=5, sleep=1 / 20.0):
     import time
