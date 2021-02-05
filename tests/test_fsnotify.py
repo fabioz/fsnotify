@@ -6,8 +6,10 @@ import fsnotify
 try:
     TimeoutError
 except NameError:
+
     class TimeoutError(Exception):
         pass
+
 
 def wait_for_condition(condition, msg=None, timeout=5, sleep=1 / 20.0):
     import time
@@ -118,6 +120,18 @@ def test_basic(tmpdir, watcher, changes):
     assert not changes
 
 
+def test_nested(tmpdir, watcher, changes):
+    nested = tmpdir.mkdir('nested')
+    watcher.set_tracked_paths([str(tmpdir), str(tmpdir), str(nested)])
+    
+    path = nested.join('my.txt')
+    path.write('foo')
+    wait_for_condition(lambda: len(changes) >= 1)
+    assert len(changes) == 1
+    assert changes.pop(0) == (Change.added, str(path))
+    assert not changes
+
+
 def gen_structure(basedir):
     dirs_created = 0
     files_created = 0
@@ -173,8 +187,6 @@ def _test_performance():
     finally:
         watcher.dispose()
         t.join()
-
-
 
 # def _test_watchgod_performance():
 #     from watchgod import watch
