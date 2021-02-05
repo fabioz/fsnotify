@@ -52,6 +52,6 @@ setup(
     test_suite='tests',
     tests_require=tests_require,
     url='https://github.com/fabioz/fsnotify',
-    version='0.1.0.dev0',
+    version='0.1.1',  # Version here and in fsnotify.__init__.py
     zip_safe=False,
 )
