@@ -62,7 +62,7 @@ import time
 
 __author__ = 'Fabio Zadrozny'
 __email__ = 'fabiofz@gmail.com'
-__version__ = '0.1.2'  # Version here and in setup.py
+__version__ = '0.1.3'  # Version here and in setup.py
 
 PRINT_SINGLE_POLL_TIME = False
 
@@ -215,6 +215,7 @@ class Watcher(object):
                 should_watch_file = lambda _: True
         self._should_watch_file = should_watch_file
         self._should_watch_dir = should_watch_dir
+        self._single_visit_info = _SingleVisitInfo()
 
     def dispose(self):
         self._disposed.set()
