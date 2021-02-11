@@ -62,7 +62,7 @@ import time
 
 __author__ = 'Fabio Zadrozny'
 __email__ = 'fabiofz@gmail.com'
-__version__ = '0.1.4'  # Version here and in setup.py
+__version__ = '0.1.5'  # Version here and in setup.py
 
 PRINT_SINGLE_POLL_TIME = False
 
@@ -218,13 +218,11 @@ class Watcher(object):
         self._disposed = threading.Event()
 
         if accept_directory is None:
-            accept_directory = lambda path_name: path_name not in self.ignored_dirs
+            from os.path import basename
+            accept_directory = lambda dir_path: basename(dir_path) not in self.ignored_dirs
         if accept_file is None:
-            if self.accepted_file_extensions:
-                accept_file = lambda path_name: \
-                    path_name.endswith(self.accepted_file_extensions)
-            else:  # No filters set.
-                accept_file = lambda _: True
+            accept_file = lambda path_name: \
+                not self.accepted_file_extensions or path_name.endswith(self.accepted_file_extensions)
         self.accept_file = accept_file
         self.accept_directory = accept_directory
         self._single_visit_info = _SingleVisitInfo()

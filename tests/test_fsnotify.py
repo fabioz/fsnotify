@@ -125,6 +125,60 @@ def test_filtering_dirs(tmpdir, watcher, changes):
     assert changes.pop(0) == (Change.deleted, str(path_include_py))
     assert not changes
 
+def test_default_ignore_dirs(tmpdir, watcher, changes):
+    watcher.ignored_dirs = ['dir_exclude']
+    
+    dir_include = tmpdir.join('dir_include').mkdir()
+    dir_exclude = tmpdir.join('dir_exclude').mkdir()
+
+    path_include_py = dir_include.join('my.py')
+    path_include_py.write('foo')
+
+    path_exclude_py = dir_exclude.join('my.py')
+    path_exclude_py.write('foo')
+
+    wait_for_condition(lambda: len(changes) >= 1)
+    assert len(changes) == 1
+    assert changes.pop(0) == (Change.added, str(path_include_py))
+    assert not changes
+
+    path_include_py.write('something else')
+    path_exclude_py.write('something else')
+    wait_for_condition(lambda: len(changes) >= 1)
+    assert changes.pop(0) == (Change.modified, str(path_include_py))
+    assert not changes
+
+    path_include_py.remove()
+    path_exclude_py.remove()
+    wait_for_condition(lambda: len(changes) >= 1)
+    assert changes.pop(0) == (Change.deleted, str(path_include_py))
+    assert not changes
+
+def test_default_file_extensions(tmpdir, watcher, changes):
+    watcher.accepted_file_extensions = ('.py',)
+
+    path_txt = tmpdir.join('my.txt')
+    path_txt.write('foo')
+
+    path_py = tmpdir.join('my.py')
+    path_py.write('foo')
+
+    wait_for_condition(lambda: len(changes) >= 1)
+    assert len(changes) == 1
+    assert changes.pop(0) == (Change.added, str(path_py))
+    assert not changes
+
+    path_txt.write('something else')
+    path_py.write('something else')
+    wait_for_condition(lambda: len(changes) >= 1)
+    assert changes.pop(0) == (Change.modified, str(path_py))
+    assert not changes
+
+    path_txt.remove()
+    path_py.remove()
+    wait_for_condition(lambda: len(changes) >= 1)
+    assert changes.pop(0) == (Change.deleted, str(path_py))
+    assert not changes
 
 def test_basic(tmpdir, watcher, changes):
     path = tmpdir.join('my.txt')
