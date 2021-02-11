@@ -62,7 +62,7 @@ import time
 
 __author__ = 'Fabio Zadrozny'
 __email__ = 'fabiofz@gmail.com'
-__version__ = '0.1.3'  # Version here and in setup.py
+__version__ = '0.1.4'  # Version here and in setup.py
 
 PRINT_SINGLE_POLL_TIME = False
 
@@ -87,16 +87,16 @@ class _PathWatcher(object):
     Helper to watch a single path. 
     '''
 
-    def __init__(self, root_path, should_watch_dir, should_watch_file, single_visit_info, max_recursion_level, sleep_time=.1):
+    def __init__(self, root_path, accept_directory, accept_file, single_visit_info, max_recursion_level, sleep_time=.1):
         '''
         :type root_path: str
-        :type should_watch_dir: Callback[str, bool]
-        :type should_watch_file: Callback[str, bool]
+        :type accept_directory: Callback[str, bool]
+        :type accept_file: Callback[str, bool]
         :type max_recursion_level: int
         :type sleep_time: float
         '''
-        self._should_watch_dir = should_watch_dir
-        self._should_watch_file = should_watch_file
+        self.accept_directory = accept_directory
+        self.accept_file = accept_file
         self._max_recursion_level = max_recursion_level
 
         self._root_path = root_path
@@ -124,6 +124,7 @@ class _PathWatcher(object):
         return hash(self._root_path)
     
     def _check_dir(self, dir_path, single_visit_info, append_change, old_file_to_mtime, level):
+        # This is the actual poll loop
         if dir_path in single_visit_info.visited_dirs or level > self._max_recursion_level:
             return
         single_visit_info.visited_dirs.add(dir_path)
@@ -153,10 +154,10 @@ class _PathWatcher(object):
                             single_visit_info.last_sleep_time = time.time()
 
                 if entry.is_dir():
-                    if self._should_watch_dir(entry.path):
+                    if self.accept_directory(entry.path):
                         self._check_dir(entry.path, single_visit_info, append_change, old_file_to_mtime, level + 1)
 
-                elif self._should_watch_file(entry.name):
+                elif self.accept_file(entry.path):
                     stat = entry.stat()
                     mtime = (stat.st_mtime_ns, stat.st_size)
                     path = entry.path
@@ -177,20 +178,22 @@ class _PathWatcher(object):
 
 class Watcher(object):
 
-    # By default (if should_watch_dir is not specified), these will be the
+    # By default (if accept_directory is not specified), these will be the
     # ignored directories.
     ignored_dirs = {u'.git', u'__pycache__', u'.idea', u'node_modules', u'.metadata'}
 
-    # By default (if should_watch_file is not specified), these will be the
+    # By default (if accept_file is not specified), these will be the
     # accepted files.
     accepted_file_extensions = ()
 
-    # Set to the target value for doing full scan of all files.
-    # Lower values will consume more CPU.
+    # Set to the target value for doing full scan of all files (adds a sleep inside the poll loop
+    # which processes files to reach the target time).
+    # Lower values will consume more CPU 
     # Set to 0.0 to have no sleeps (which will result in a higher cpu load).
     target_time_for_single_scan = 2.0
 
-    # Set the target value from the start of one scan to the start of another scan.
+    # Set the target value from the start of one scan to the start of another scan (adds a
+    # sleep after a full poll is done to reach the target time).
     # Lower values will consume more CPU.
     # Set to 0.0 to have a new scan start right away without any sleeps.
     target_time_for_notification = 4.0
@@ -201,21 +204,50 @@ class Watcher(object):
     # This is the maximum recursion level.
     max_recursion_level = 10
 
-    def __init__(self, should_watch_dir=None, should_watch_file=None):
+    def __init__(self, accept_directory=None, accept_file=None):
+        '''
+        :param Callable[str, bool] accept_directory:
+            Callable that returns whether a directory should be watched.
+            Note: if passed it'll override the `ignored_dirs`
+             
+        :param Callable[str, bool] accept_file:
+            Callable that returns whether a file should be watched.
+            Note: if passed it'll override the `accepted_file_extensions`.
+        '''
         self._path_watchers = set()
         self._disposed = threading.Event()
 
-        if should_watch_dir is None:
-            should_watch_dir = lambda path_name: path_name not in self.ignored_dirs
-        if should_watch_file is None:
+        if accept_directory is None:
+            accept_directory = lambda path_name: path_name not in self.ignored_dirs
+        if accept_file is None:
             if self.accepted_file_extensions:
-                should_watch_file = lambda path_name: \
+                accept_file = lambda path_name: \
                     path_name.endswith(self.accepted_file_extensions)
             else:  # No filters set.
-                should_watch_file = lambda _: True
-        self._should_watch_file = should_watch_file
-        self._should_watch_dir = should_watch_dir
+                accept_file = lambda _: True
+        self.accept_file = accept_file
+        self.accept_directory = accept_directory
         self._single_visit_info = _SingleVisitInfo()
+        
+    @property
+    def accept_directory(self):
+        return self._accept_directory
+    
+    @accept_directory.setter
+    def accept_directory(self, accept_directory):
+        self._accept_directory = accept_directory
+        for path_watcher in self._path_watchers:
+            path_watcher.accept_directory = accept_directory
+
+    @property
+    def accept_file(self):
+        return self._accept_file
+    
+    @accept_file.setter
+    def accept_file(self, accept_file):
+        self._accept_file = accept_file
+        for path_watcher in self._path_watchers:
+            path_watcher.accept_file = accept_file
 
     def dispose(self):
         self._disposed.set()
@@ -226,7 +258,7 @@ class Watcher(object):
 
     def set_tracked_paths(self, paths):
         """
-        Note: always resets all path trackers.
+        Note: always resets all path trackers to track the passed paths.
         """
         if not isinstance(paths, (list, tuple, set)):
             paths = (paths,)
@@ -234,7 +266,7 @@ class Watcher(object):
         # Sort by the path len so that the bigger paths come first (so,
         # if there's any nesting we want the nested paths to be visited
         # before the parent paths so that the max_recursion_level is correct).            
-        paths = sorted(paths, key=lambda path: -len(path))
+        paths = sorted(paths, key=lambda path:-len(path))
         path_watchers = set()
         
         self._single_visit_info = _SingleVisitInfo()
@@ -245,8 +277,8 @@ class Watcher(object):
                 sleep_time = 0.0
             path_watcher = _PathWatcher(
                 path,
-                self._should_watch_dir,
-                self._should_watch_file,
+                self.accept_directory,
+                self.accept_file,
                 self._single_visit_info,
                 max_recursion_level=self.max_recursion_level,
                 sleep_time=sleep_time,
@@ -258,6 +290,8 @@ class Watcher(object):
     def iter_changes(self):
         '''
         Continuously provides changes (until dispose() is called).
+        
+        Changes provided are tuples with the Change enum and filesystem path.
 
         :rtype: Iterable[Tuple[Change, str]]
         '''
@@ -279,7 +313,6 @@ class Watcher(object):
     
             for change in changes:
                 yield change
-
 
             actual_time = (time.time() - initial_time)
             if self.print_poll_time:

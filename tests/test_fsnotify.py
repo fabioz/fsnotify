@@ -59,9 +59,13 @@ def watcher(tmpdir, changes):
     t.join()
 
 
-def test_filtering(tmpdir, watcher, changes):
-    for path_watcher in watcher.path_watchers:
-        path_watcher._should_watch_file = lambda filename: filename.endswith('.py')
+def test_filtering_files(tmpdir, watcher, changes):
+
+    def accept_file(filepath):
+        assert '\\' in filepath or '/' in filepath
+        return filepath.endswith('.py')
+    
+    watcher.accept_file = accept_file
 
     path_txt = tmpdir.join('my.txt')
     path_txt.write('foo')
@@ -84,6 +88,41 @@ def test_filtering(tmpdir, watcher, changes):
     path_py.remove()
     wait_for_condition(lambda: len(changes) >= 1)
     assert changes.pop(0) == (Change.deleted, str(path_py))
+    assert not changes
+
+def test_filtering_dirs(tmpdir, watcher, changes):
+
+    def accept_directory(dirpath):
+        assert '\\' in dirpath or '/' in dirpath
+        dirpath = dirpath.replace('\\', '/')
+        return '/dir_exclude' not in dirpath
+    
+    watcher.accept_directory = accept_directory
+    
+    dir_include = tmpdir.join('dir_include').mkdir()
+    dir_exclude = tmpdir.join('dir_exclude').mkdir()
+
+    path_include_py = dir_include.join('my.py')
+    path_include_py.write('foo')
+
+    path_exclude_py = dir_exclude.join('my.py')
+    path_exclude_py.write('foo')
+
+    wait_for_condition(lambda: len(changes) >= 1)
+    assert len(changes) == 1
+    assert changes.pop(0) == (Change.added, str(path_include_py))
+    assert not changes
+
+    path_include_py.write('something else')
+    path_exclude_py.write('something else')
+    wait_for_condition(lambda: len(changes) >= 1)
+    assert changes.pop(0) == (Change.modified, str(path_include_py))
+    assert not changes
+
+    path_include_py.remove()
+    path_exclude_py.remove()
+    wait_for_condition(lambda: len(changes) >= 1)
+    assert changes.pop(0) == (Change.deleted, str(path_include_py))
     assert not changes
 
 
