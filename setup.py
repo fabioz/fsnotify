@@ -44,7 +44,7 @@ setup(
     long_description=readme + '\n\n' + history,
     long_description_content_type='text/markdown',
     include_package_data=True,
-    keywords='fsnotify fsnotify fsnotify',
+    keywords='fsnotify filesystem notifications watchdog watchgod',
     name='fsnotify',
     packages=find_packages(include=['fsnotify', 'fsnotify.*']),
     python_requires='>=2.7,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*',
@@ -52,6 +52,6 @@ setup(
     test_suite='tests',
     tests_require=tests_require,
     url='https://github.com/fabioz/fsnotify',
-    version='0.1.5',  # Version here and in fsnotify.__init__.py
+    version='0.1.6',  # Version here and in fsnotify.__init__.py
     zip_safe=False,
 )

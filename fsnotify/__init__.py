@@ -8,9 +8,9 @@ Sample usage to track changes in a thread.
 
     # Configure target values to compute throttling.
     # Note: internal sleep times will be updated based on
-    # profiling the actual application runtime to match 
+    # profiling the actual application runtime to match
     # those values.
-    
+
     watcher.target_time_for_single_scan = 2.
     watcher.target_time_for_notification = 4.
 
@@ -62,7 +62,7 @@ import time
 
 __author__ = 'Fabio Zadrozny'
 __email__ = 'fabiofz@gmail.com'
-__version__ = '0.1.5'  # Version here and in setup.py
+__version__ = '0.1.6'  # Version here and in setup.py
 
 PRINT_SINGLE_POLL_TIME = False
 
@@ -87,7 +87,7 @@ class _PathWatcher(object):
     Helper to watch a single path. 
     '''
 
-    def __init__(self, root_path, accept_directory, accept_file, single_visit_info, max_recursion_level, sleep_time=.1):
+    def __init__(self, root_path, accept_directory, accept_file, single_visit_info, max_recursion_level, sleep_time=.0):
         '''
         :type root_path: str
         :type accept_directory: Callback[str, bool]
@@ -122,7 +122,7 @@ class _PathWatcher(object):
 
     def __hash__(self):
         return hash(self._root_path)
-    
+
     def _check_dir(self, dir_path, single_visit_info, append_change, old_file_to_mtime, level):
         # This is the actual poll loop
         if dir_path in single_visit_info.visited_dirs or level > self._max_recursion_level:
@@ -137,7 +137,7 @@ class _PathWatcher(object):
                         dir_path = dir_path.decode('utf-8')
                     except UnicodeDecodeError:
                         return  # Ignore if we can't deal with the path.
-                    
+
             new_files = single_visit_info.file_to_mtime
 
             for entry in scandir(dir_path):
@@ -162,13 +162,13 @@ class _PathWatcher(object):
                     mtime = (stat.st_mtime_ns, stat.st_size)
                     path = entry.path
                     new_files[path] = mtime
-                    
+
                     old_mtime = old_file_to_mtime.pop(path, None)
                     if not old_mtime:
                         append_change((Change.added, path))
                     elif old_mtime != mtime:
                         append_change((Change.modified, path))
-            
+
         except OSError:
             pass  # Directory was removed in the meanwhile.
 
@@ -188,7 +188,7 @@ class Watcher(object):
 
     # Set to the target value for doing full scan of all files (adds a sleep inside the poll loop
     # which processes files to reach the target time).
-    # Lower values will consume more CPU 
+    # Lower values will consume more CPU
     # Set to 0.0 to have no sleeps (which will result in a higher cpu load).
     target_time_for_single_scan = 2.0
 
@@ -200,7 +200,7 @@ class Watcher(object):
 
     # Set to True to print the time for a single poll through all the paths.
     print_poll_time = False
-    
+
     # This is the maximum recursion level.
     max_recursion_level = 10
 
@@ -209,7 +209,7 @@ class Watcher(object):
         :param Callable[str, bool] accept_directory:
             Callable that returns whether a directory should be watched.
             Note: if passed it'll override the `ignored_dirs`
-             
+
         :param Callable[str, bool] accept_file:
             Callable that returns whether a file should be watched.
             Note: if passed it'll override the `accepted_file_extensions`.
@@ -226,11 +226,11 @@ class Watcher(object):
         self.accept_file = accept_file
         self.accept_directory = accept_directory
         self._single_visit_info = _SingleVisitInfo()
-        
+
     @property
     def accept_directory(self):
         return self._accept_directory
-    
+
     @accept_directory.setter
     def accept_directory(self, accept_directory):
         self._accept_directory = accept_directory
@@ -240,7 +240,7 @@ class Watcher(object):
     @property
     def accept_file(self):
         return self._accept_file
-    
+
     @accept_file.setter
     def accept_file(self, accept_file):
         self._accept_file = accept_file
@@ -263,16 +263,14 @@ class Watcher(object):
 
         # Sort by the path len so that the bigger paths come first (so,
         # if there's any nesting we want the nested paths to be visited
-        # before the parent paths so that the max_recursion_level is correct).            
-        paths = sorted(paths, key=lambda path:-len(path))
+        # before the parent paths so that the max_recursion_level is correct).
+        paths = sorted(set(paths), key=lambda path:-len(path))
         path_watchers = set()
-        
+
         self._single_visit_info = _SingleVisitInfo()
         
         for path in paths:
-            sleep_time = 0.1
-            if self.target_time_for_single_scan <= 0.0:
-                sleep_time = 0.0
+            sleep_time = 0.  # When collecting the first time, sleep_time should be 0!
             path_watcher = _PathWatcher(
                 path,
                 self.accept_directory,
@@ -288,7 +286,7 @@ class Watcher(object):
     def iter_changes(self):
         '''
         Continuously provides changes (until dispose() is called).
-        
+
         Changes provided are tuples with the Change enum and filesystem path.
 
         :rtype: Iterable[Tuple[Change, str]]
@@ -300,15 +298,15 @@ class Watcher(object):
             old_file_to_mtime = old_visit_info.file_to_mtime
             changes = []
             append_change = changes.append
-            
+
             self._single_visit_info = single_visit_info = _SingleVisitInfo()
             for path_watcher in self._path_watchers:
                 path_watcher._check(single_visit_info, append_change, old_file_to_mtime)
-                    
+
             # Note that we pop entries while visiting, so, what remained is what's deleted.
             for entry in old_file_to_mtime:
                 append_change((Change.deleted, entry))
-    
+
             for change in changes:
                 yield change
 
@@ -333,6 +331,8 @@ class Watcher(object):
                         perc = 0.5
 
                     for path_watcher in self._path_watchers:
+                        if path_watcher.sleep_time <= 0.0:
+                            path_watcher.sleep_time = 0.001
                         new_sleep_time = path_watcher.sleep_time * perc
 
                         # Prevent from changing the values too much (go slowly into the right
