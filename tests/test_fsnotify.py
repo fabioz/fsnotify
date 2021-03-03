@@ -234,10 +234,12 @@ def test_not_recursive(tmpdir, watcher, changes):
 
     nested = tmpdir.mkdir('nested')
     watcher.set_tracked_paths([fsnotify.TrackedPath(str(tmpdir), recursive=False)])
+    time.sleep(.5) # i.e.: if we were in the middle of it, we don't want to be notified from the previous run.
+    
     path = nested.join('my.txt')
     path.write('foo')
 
-    time.sleep(1)
+    time.sleep(.5)
     assert len(changes) == 0
 
     path = nested.join('dont_get_this.txt')
