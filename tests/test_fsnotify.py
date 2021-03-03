@@ -42,7 +42,7 @@ def watcher(tmpdir, changes):
     import threading
 
     watcher = fsnotify.Watcher()
-    
+
     watcher.target_time_for_single_scan = 0.1
     watcher.target_time_for_notification = 0.1
     watcher.set_tracked_paths(str(tmpdir))
@@ -64,7 +64,7 @@ def test_filtering_files(tmpdir, watcher, changes):
     def accept_file(filepath):
         assert '\\' in filepath or '/' in filepath
         return filepath.endswith('.py')
-    
+
     watcher.accept_file = accept_file
 
     path_txt = tmpdir.join('my.txt')
@@ -90,15 +90,16 @@ def test_filtering_files(tmpdir, watcher, changes):
     assert changes.pop(0) == (Change.deleted, str(path_py))
     assert not changes
 
+
 def test_filtering_dirs(tmpdir, watcher, changes):
 
     def accept_directory(dirpath):
         assert '\\' in dirpath or '/' in dirpath
         dirpath = dirpath.replace('\\', '/')
         return '/dir_exclude' not in dirpath
-    
+
     watcher.accept_directory = accept_directory
-    
+
     dir_include = tmpdir.join('dir_include').mkdir()
     dir_exclude = tmpdir.join('dir_exclude').mkdir()
 
@@ -124,10 +125,11 @@ def test_filtering_dirs(tmpdir, watcher, changes):
     wait_for_condition(lambda: len(changes) >= 1)
     assert changes.pop(0) == (Change.deleted, str(path_include_py))
     assert not changes
+
 
 def test_default_ignore_dirs(tmpdir, watcher, changes):
     watcher.ignored_dirs = ['dir_exclude']
-    
+
     dir_include = tmpdir.join('dir_include').mkdir()
     dir_exclude = tmpdir.join('dir_exclude').mkdir()
 
@@ -153,6 +155,7 @@ def test_default_ignore_dirs(tmpdir, watcher, changes):
     wait_for_condition(lambda: len(changes) >= 1)
     assert changes.pop(0) == (Change.deleted, str(path_include_py))
     assert not changes
+
 
 def test_default_file_extensions(tmpdir, watcher, changes):
     watcher.accepted_file_extensions = ('.py',)
@@ -179,6 +182,7 @@ def test_default_file_extensions(tmpdir, watcher, changes):
     wait_for_condition(lambda: len(changes) >= 1)
     assert changes.pop(0) == (Change.deleted, str(path_py))
     assert not changes
+
 
 def test_basic(tmpdir, watcher, changes):
     path = tmpdir.join('my.txt')
@@ -216,8 +220,30 @@ def test_basic(tmpdir, watcher, changes):
 def test_nested(tmpdir, watcher, changes):
     nested = tmpdir.mkdir('nested')
     watcher.set_tracked_paths([str(tmpdir), str(tmpdir), str(nested)])
-    
+
     path = nested.join('my.txt')
+    path.write('foo')
+    wait_for_condition(lambda: len(changes) >= 1)
+    assert len(changes) == 1
+    assert changes.pop(0) == (Change.added, str(path))
+    assert not changes
+
+
+def test_not_recursive(tmpdir, watcher, changes):
+    import time
+
+    nested = tmpdir.mkdir('nested')
+    watcher.set_tracked_paths([fsnotify.TrackedPath(str(tmpdir), recursive=False)])
+    path = nested.join('my.txt')
+    path.write('foo')
+
+    time.sleep(1)
+    assert len(changes) == 0
+
+    path = nested.join('dont_get_this.txt')
+    path.write('foo')
+
+    path = tmpdir.join('get_this.txt')
     path.write('foo')
     wait_for_condition(lambda: len(changes) >= 1)
     assert len(changes) == 1
@@ -283,18 +309,18 @@ def _test_performance():
 
 # def _test_watchgod_performance():
 #     from watchgod import watch
-# 
+#
 #     import threading
 #     import time
-# 
+#
 #     def start_watching():
 #         from watchgod.watcher import AllWatcher
 #         for changes in watch(target_big_dir, watcher_cls=AllWatcher):
 #             print(changes)
-# 
+#
 #     t = threading.Thread(target=start_watching)
 #     t.start()
-# 
+#
 #     try:
 #         time.sleep(100)
 #     finally:

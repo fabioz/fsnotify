@@ -62,7 +62,7 @@ import time
 
 __author__ = 'Fabio Zadrozny'
 __email__ = 'fabiofz@gmail.com'
-__version__ = '0.1.6'  # Version here and in setup.py
+__version__ = '0.2.0'  # Version here and in setup.py
 
 PRINT_SINGLE_POLL_TIME = False
 
@@ -82,12 +82,21 @@ class _SingleVisitInfo(object):
         self.last_sleep_time = time.time()
 
 
+class TrackedPath(object):
+
+    __slots__ = ['path', 'recursive']
+
+    def __init__(self, path, recursive):
+        self.path = path
+        self.recursive = recursive
+
+
 class _PathWatcher(object):
     '''
-    Helper to watch a single path. 
+    Helper to watch a single path.
     '''
 
-    def __init__(self, root_path, accept_directory, accept_file, single_visit_info, max_recursion_level, sleep_time=.0):
+    def __init__(self, root_path, accept_directory, accept_file, single_visit_info, max_recursion_level, sleep_time=.0, recursive=True):
         '''
         :type root_path: str
         :type accept_directory: Callback[str, bool]
@@ -100,6 +109,7 @@ class _PathWatcher(object):
         self._max_recursion_level = max_recursion_level
 
         self._root_path = root_path
+        self._recursive = recursive
 
         # Initial sleep value for throttling, it'll be auto-updated based on the
         # Watcher.target_time_for_single_scan.
@@ -155,7 +165,8 @@ class _PathWatcher(object):
 
                 if entry.is_dir():
                     if self.accept_directory(entry.path):
-                        self._check_dir(entry.path, single_visit_info, append_change, old_file_to_mtime, level + 1)
+                        if self._recursive:
+                            self._check_dir(entry.path, single_visit_info, append_change, old_file_to_mtime, level + 1)
 
                 elif self.accept_file(entry.path):
                     stat = entry.stat()
@@ -257,27 +268,34 @@ class Watcher(object):
     def set_tracked_paths(self, paths):
         """
         Note: always resets all path trackers to track the passed paths.
+        :type paths: [str|TrackedPath]
         """
         if not isinstance(paths, (list, tuple, set)):
             paths = (paths,)
 
+        def key(path_or_str):
+            if isinstance(path_or_str, TrackedPath):
+                return -len(path_or_str.path)
+            return -len(path_or_str)
+
         # Sort by the path len so that the bigger paths come first (so,
         # if there's any nesting we want the nested paths to be visited
         # before the parent paths so that the max_recursion_level is correct).
-        paths = sorted(set(paths), key=lambda path:-len(path))
+        paths = sorted(set(paths), key=key)
         path_watchers = set()
 
         self._single_visit_info = _SingleVisitInfo()
-        
+
         for path in paths:
             sleep_time = 0.  # When collecting the first time, sleep_time should be 0!
             path_watcher = _PathWatcher(
-                path,
+                path.path if isinstance(path, TrackedPath) else path,
                 self.accept_directory,
                 self.accept_file,
                 self._single_visit_info,
                 max_recursion_level=self.max_recursion_level,
                 sleep_time=sleep_time,
+                recursive=path.recursive if isinstance(path, TrackedPath) else path
             )
 
             path_watchers.add(path_watcher)
