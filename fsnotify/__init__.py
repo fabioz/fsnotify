@@ -62,7 +62,7 @@ import time
 
 __author__ = 'Fabio Zadrozny'
 __email__ = 'fabiofz@gmail.com'
-__version__ = '0.2.0'  # Version here and in setup.py
+__version__ = '0.2.1'  # Version here and in setup.py
 
 PRINT_SINGLE_POLL_TIME = False
 
@@ -225,6 +225,8 @@ class Watcher(object):
             Callable that returns whether a file should be watched.
             Note: if passed it'll override the `accepted_file_extensions`.
         '''
+        self._lock = threading.Lock()
+        
         self._path_watchers = set()
         self._disposed = threading.Event()
 
@@ -284,7 +286,7 @@ class Watcher(object):
         paths = sorted(set(paths), key=key)
         path_watchers = set()
 
-        self._single_visit_info = _SingleVisitInfo()
+        single_visit_info = _SingleVisitInfo()
 
         for path in paths:
             sleep_time = 0.  # When collecting the first time, sleep_time should be 0!
@@ -292,14 +294,17 @@ class Watcher(object):
                 path.path if isinstance(path, TrackedPath) else path,
                 self.accept_directory,
                 self.accept_file,
-                self._single_visit_info,
+                single_visit_info,
                 max_recursion_level=self.max_recursion_level,
                 sleep_time=sleep_time,
                 recursive=path.recursive if isinstance(path, TrackedPath) else path
             )
 
             path_watchers.add(path_watcher)
-        self._path_watchers = path_watchers
+        
+        with self._lock:    
+            self._single_visit_info = single_visit_info
+            self._path_watchers = path_watchers
 
     def iter_changes(self):
         '''
@@ -310,14 +315,17 @@ class Watcher(object):
         :rtype: Iterable[Tuple[Change, str]]
         '''
         while not self._disposed.is_set():
+
+            with self._lock:
+                old_visit_info = self._single_visit_info
+                old_file_to_mtime = old_visit_info.file_to_mtime
+                changes = []
+                append_change = changes.append
+    
+                self._single_visit_info = single_visit_info = _SingleVisitInfo()
+                path_watchers = self._path_watchers.copy()
+                
             initial_time = time.time()
-
-            old_visit_info = self._single_visit_info
-            old_file_to_mtime = old_visit_info.file_to_mtime
-            changes = []
-            append_change = changes.append
-
-            self._single_visit_info = single_visit_info = _SingleVisitInfo()
             for path_watcher in self._path_watchers:
                 path_watcher._check(single_visit_info, append_change, old_file_to_mtime)
 
@@ -334,7 +342,7 @@ class Watcher(object):
 
             if actual_time > 0:
                 if self.target_time_for_single_scan <= 0.0:
-                    for path_watcher in self._path_watchers:
+                    for path_watcher in path_watchers:
                         path_watcher.sleep_time = 0.0
                 else:
                     perc = self.target_time_for_single_scan / actual_time
@@ -348,7 +356,7 @@ class Watcher(object):
                     elif perc < 0.5:
                         perc = 0.5
 
-                    for path_watcher in self._path_watchers:
+                    for path_watcher in path_watchers:
                         if path_watcher.sleep_time <= 0.0:
                             path_watcher.sleep_time = 0.001
                         new_sleep_time = path_watcher.sleep_time * perc
